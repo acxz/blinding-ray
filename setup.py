@@ -18,7 +18,7 @@ setuptools.setup(
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
     install_requires=[
-        'reconchess',
+        'open-spiel',
         'ray[rllib]',
     ],
 )
