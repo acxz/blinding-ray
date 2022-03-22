@@ -19,7 +19,8 @@ config = {
     "log_sys_usage": True,
     "evaluation_num_workers": 1,
     "evaluation_config": {
-        "render_env": True, # This does not work
+        "render_env": True, # This does not work if record_env is False
+        "record_env": True,
     },
     "num_gpus": 0,
     "output": "logdir",
