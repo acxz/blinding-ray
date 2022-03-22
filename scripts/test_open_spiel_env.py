@@ -12,8 +12,23 @@ register_env("open_spiel_env_rbc", lambda _: OpenSpielEnv(
 
 # Configure the algorithm
 config = {
-    "env": "open_spiel_env_rbc",
     "num_workers": 1,
+    "num_envs_per_worker": 1,
+    "env": "open_spiel_env_rbc",
+    "render_env": False,
+    "log_sys_usage": True,
+    "evaluation_num_workers": 1,
+    "evaluation_config": {
+        "render_env": True, # This does not work
+    },
+    "num_gpus": 0,
+    "output": "logdir",
+    "output_compress_columns": ["obs", "new_obs"],
+    "multiagent": {
+       "policies": {
+           # Figure this out, prob the answer to know our opponent
+       }
+    }
 }
 
 # Create our RLlib trainer
@@ -21,6 +36,11 @@ trainer = RandomTrainer(config=config)
 # trainer = AttackerTrainer(config=config)
 
 # Run training iterations
-iterations = 1
-for _ in range(iterations):
-    print(trainer.train())
+#print("Training")
+#iterations = 1
+#for _ in range(iterations):
+#    print(trainer.train())
+
+# Run evaluation
+print("Evaluating")
+trainer.evaluate()
