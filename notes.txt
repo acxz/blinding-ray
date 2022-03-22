@@ -1,0 +1,141 @@
+develop in venv (until python-ray is patched ig) but wait I would then need a
+py3.9 ray riiip ig time to patch it
+tldr: don't devel in venv, have to use conda maybe actually b/c cuda version
+
+start off with loading in env and creating a simple agent for it
+
+We actually have 3 components: Sense, Estimate, Action
+where Sense and Action are action agents
+
+implement the alg such that it can be implemented inside ray easily
+upstream IRL alg to ray
+
+use same estimation as trout bot but use vanilla RL on it
+use same estimation as trout bot but use IRL on it
+
+Links:
+https://www.reddit.com/r/reinforcementlearning/comments/hdzmv3/help_with_reinforcement_learning_in_reconchess/
+https://arxiv.org/abs/2006.10410
+https://arxiv.org/abs/1603.01121
+
+papers on drl and imperfect information
+
+How to break it up?
+
+Have default estimator in trout: trout_sensor
+Have default planner in trout: stockfish
+
+1. Use RL to replace stockfish but keep estimator
+    Use IRL to replace stockfish (which IRL to pick?) Read the survey paper and
+    figure out the state of the art IRL alg
+
+2. Use RL to replace estimator but keep stockfish planner
+    Have a good default planner but try to improve the information stockfish
+    receives
+
+3. Use RL for both estimator and planner
+    Do this after we can get at least a better estimator or planner
+
+
+Control flow with inputs:
+
+perceived board state:
+For each piece a prob attached to each block and not being on the grid
+(8x8 + 1 probs which sum to 1)
+
+perceived board state is updated with the 1) estimator, 2) your own moves,
+3) opponent move if they capture one of your pieces
+
+Estimator:
+input: previous perceived board state ?
+output: block to sense [space: 7x7]
+(to decrease the space can limit it to the inner grid
+(7x7) since we sense a 3x3 so the edges/corners will be sensed even with a sense
+coordinate once block inside
+
+if u want the estimator to be a bit biased on looking where the planner wants to
+move then the planner should query a move and then that should be fed as input
+to the estimator. The estimator then picks a grid to sense, which information is
+then fed into the planner to actually make the move
+
+loss function input: ?
+
+Planner:
+input:  ?
+output: piece movement [space variable per turn] how to encode this as a NN
+output? // Figure out
+
+loss function input: ?
+
+remember we can just IRL on top of both Trout's sensor and planner
+
+// Report Due: 3/22/22
+
+Run rllib env (okay it runs!)
+Implement Random, Attacker, and Trout via rllib env
+
+Okay now create random rllib agent
+rllib has random_agent
+See: https://github.com/ray-project/ray/blob/master/rllib/contrib/random_agent/random_agent.py
+For some reason it is not included in the py3.8 wheels for ray upstream issue ig
+Don't want to use it anyway tho since it doesn't extend a policy
+Maybe PR to replace it with a trainer that is based on the policy
+And: https://github.com/ray-project/ray/blob/master/rllib/examples/policy/random_policy.py
+Need to upstream some functionality to RandomTrainer (see extended
+MyRandomTrainer class)
+
+TODO: how to get the match data and play it back with reconchess's rc-replay
+script (at the very least i just wanna gui the game)
+okay state is being saved in output.json via infos
+now need to parse output.json and write the state sequence to rc-replay compat
+json (do i also need sense actions?)
+Whoa need a lot more than I thought
+Make feature request for rbc openspiel to add output in APL format and then from
+rllib env wrapper, I can just do `infos = {self.gamehistory}`
+I guess till then I can't really see nice gui...
+since if openspiel adds that functionality to rbc then
+they need it for everything? (maybe it would just a rbc utility function?)
+idk maybe still possible through just rllib env wrapper,
+I just need the function mapping as the game is being played
+but it would be a good bit of work that we can put off for now, I think
+one last thing, see if openspiel does have some kinda of game history output for
+rbc
+
+Try to decrease random illegal moves then...
+
+Also who is my opponent?
+
+Concepts:
+Iteration (training iterations)
+Episode (one playthrough?)
+num_workers (threads running a game for each iteration)
+
+Okay now create Attacker rllib agent
+
+Implement a vanilla RL alg
+Code & Implement IRL alg
+
+Tensorboard viewing:
+tensorboard --logdir ~/ray_results/... (Just the dir not the actual json)
+
+Imp upstream:
+open_spiel rbc dones't always have good checks and return pyspiel.SpielError
+Thus we need to do a manually assertion in the ray/rllib/env/wrappers/open_spiel
+file:
+
+```python
+            try:
+                # TODO: (acxz) sometimes this is an illegal action yet no error is thrown
+                # This is prob RBC code's fault for not throwing a pyspiel.SpielError i'm guessing
+                # but also why is action a bad value? I guess dependent on the policy being sent
+                # So we do an assertion and then catch it
+                assert action[curr_player] in self.state.legal_actions()
+
+                self.state.apply_action(action[curr_player])
+            # TODO: (sven) resolve this hack by publishing legal actions
+            #  with each step.
+            except (AssertionError, pyspiel.SpielError) as e:
+                self.state.apply_action(
+                    np.random.choice(self.state.legal_actions()))
+                penalties[curr_player] = -0.1
+```
