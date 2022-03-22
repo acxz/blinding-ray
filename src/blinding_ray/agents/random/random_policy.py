@@ -11,5 +11,6 @@ class MyRandomPolicy(RandomPolicy):
                                buffer_index: int = 0) -> int:
         return 0
 
+    @override(Policy)
     def learn_on_loaded_batch(self, offset: int = 0, buffer_index: int = 0):
         return [0]
