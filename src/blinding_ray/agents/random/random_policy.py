@@ -1,3 +1,6 @@
+# Based on the attacker implementation bot from reconchess.
+# See: https://github.com/reconnaissanceblindchess/reconchess/blob/master/reconchess/bots/random_bot.py
+
 import random
 from typing import Dict, Tuple
 
