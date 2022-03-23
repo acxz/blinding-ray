@@ -1,14 +1,8 @@
-develop in venv (until python-ray is patched ig) but wait I would then need a
-py3.9 ray riiip ig time to patch it
-tldr: don't devel in venv, have to use conda maybe actually b/c cuda version
-
-start off with loading in env and creating a simple agent for it
+develop in conda, since ray with venv is broken (why?) and don't have openspiel
+aur package
 
 We actually have 3 components: Sense, Estimate, Action
 where Sense and Action are action agents
-
-implement the alg such that it can be implemented inside ray easily
-upstream IRL alg to ray
 
 use same estimation as trout bot but use vanilla RL on it
 use same estimation as trout bot but use IRL on it
@@ -71,18 +65,26 @@ remember we can just IRL on top of both Trout's sensor and planner
 
 // Report Due: 3/22/22
 
+start off with loading in env and creating a simple agent for it
+Then create an IRL Policy/Trainer
+
 Run rllib env (okay it runs!)
 Implement Random, Attacker, and Trout via rllib env
 
-Okay now create random rllib agent
-rllib has random_agent
-See: https://github.com/ray-project/ray/blob/master/rllib/contrib/random_agent/random_agent.py
-For some reason it is not included in the py3.8 wheels for ray upstream issue ig
-Don't want to use it anyway tho since it doesn't extend a policy
-Maybe PR to replace it with a trainer that is based on the policy
+Okay now create random rllib agent (done!)
 And: https://github.com/ray-project/ray/blob/master/rllib/examples/policy/random_policy.py
-Need to upstream some functionality to RandomTrainer (see extended
-MyRandomTrainer class)
+Our random policy is fundamentally different since we are based on random legal
+actions and not random of all actions
+To get the info state need the following patch in
+/rllib/evaluation/collectors/simple_list_collector.py
+```python
+            # (acxz) add INFOS
+            delta = -1 if data_col in [
+                SampleBatch.OBS, SampleBatch.ENV_ID, SampleBatch.EPS_ID,
+                SampleBatch.AGENT_INDEX, SampleBatch.T, SampleBatch.INFOS
+            ] else 0
+```
+Note: This doesn't solve the first action tho
 
 TODO: how to get the match data and play it back with reconchess's rc-replay
 script (at the very least i just wanna gui the game)
@@ -99,16 +101,10 @@ idk maybe still possible through just rllib env wrapper,
 I just need the function mapping as the game is being played
 but it would be a good bit of work that we can put off for now, I think
 one last thing, see if openspiel does have some kinda of game history output for
-rbc
+rbc (maybe with state->ActionToString)
 
-Try to decrease random illegal moves then...
-
-Also who is my opponent?
-
-Concepts:
-Iteration (training iterations)
-Episode (one playthrough?)
-num_workers (threads running a game for each iteration)
+Also who is my opponent? The big questions man lol
+I think we found the answer to this with the multiagent policies config
 
 Okay now create Attacker rllib agent
 
