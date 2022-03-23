@@ -31,12 +31,14 @@ def policy_mapping_fn(agent_id, episode, worker, **kwargs):
 
 # Configure the algorithm
 config = {
-    "num_workers": 1,
+    "num_workers": 0, # num of cpus to use minus one
     "num_envs_per_worker": 1,
+    "batch_mode": "complete_episodes",
     "env": "open_spiel_env_rbc",
     "render_env": False,
     "log_sys_usage": True,
     "evaluation_num_workers": 1,
+    "evaluation_duration": 1, # Play for one episode
     "evaluation_config": {
         "render_env": True, # This does not work if record_env is False
         "record_env": True, # Is this even recording?
@@ -46,23 +48,24 @@ config = {
     "output_compress_columns": ["obs", "new_obs"],
     "multiagent": {
        "policies": {
-           "player": PolicySpec(policy_class=TroutPolicy),
+           "player": PolicySpec(policy_class=AttackerPolicy),
            "opponent": PolicySpec(policy_class=RandomPolicy),
        },
        "policy_mapping_fn": policy_mapping_fn,
        "policies_to_train": ["player"],
     },
+    #"callbacks": RandomCallbacks,
 }
 
 # Create our RLlib trainer
 trainer = Trainer(config=config)
 
 # Run training iterations
-#print("Training")
-#iterations = 1
-#for _ in range(iterations):
-#    print(trainer.train())
+print("Training")
+iterations = 1
+for _ in range(iterations):
+    print(trainer.train())
 
 # Run evaluation
-print("Evaluating")
-trainer.evaluate()
+#print("Evaluating")
+#trainer.evaluate()
