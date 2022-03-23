@@ -7,8 +7,9 @@ from ray.rllib.agents.trainer import Trainer
 from ray.rllib.env.wrappers.open_spiel import OpenSpielEnv
 from ray.tune import register_env
 
-from blinding_ray.agents.random import RandomPolicy
 from blinding_ray.agents.attacker import AttackerPolicy
+from blinding_ray.agents.random import RandomPolicy
+from blinding_ray.agents.trout import TroutPolicy
 
 # RBC OpenSpiel env
 register_env("open_spiel_env_rbc", lambda _: OpenSpielEnv(
@@ -37,7 +38,7 @@ config = {
     "log_sys_usage": True,
     "evaluation_num_workers": 1,
     "evaluation_config": {
-        "render_env": False, # This does not work if record_env is False
+        "render_env": True, # This does not work if record_env is False
         "record_env": True, # Is this even recording?
     },
     "num_gpus": 0,
@@ -45,7 +46,7 @@ config = {
     "output_compress_columns": ["obs", "new_obs"],
     "multiagent": {
        "policies": {
-           "player": PolicySpec(policy_class=AttackerPolicy),
+           "player": PolicySpec(policy_class=TroutPolicy),
            "opponent": PolicySpec(policy_class=RandomPolicy),
        },
        "policy_mapping_fn": policy_mapping_fn,
