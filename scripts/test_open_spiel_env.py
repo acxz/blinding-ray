@@ -39,7 +39,7 @@ config = {
     "multiagent": {
        "policies": {
            # Figure this out, prob the answer to know our opponent
-           "agent": PolicySpec(policy_class=RandomPolicy),
+           "agent": PolicySpec(policy_class=AttackerPolicy),
            "opponent": PolicySpec(policy_class=RandomPolicy),
        },
        "policy_mapping_fn": policy_mapping_fn,
