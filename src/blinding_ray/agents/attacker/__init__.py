@@ -1,1 +1,2 @@
 from blinding_ray.agents.attacker.attacker_policy import AttackerPolicy
+from blinding_ray.agents.attacker.attacker_callbacks import AttackerCallbacks
