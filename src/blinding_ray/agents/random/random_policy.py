@@ -48,17 +48,20 @@ class RandomPolicy(Policy):
         # openspiel has no method for state.get_phase() to determine if
         # sensing or moving
         # Thus the state.legal_actions() is used to determine which phase
+        # Could use the observation space directly, but hard to read from
         # sensing has action space from [0...35]
         # moving has action space from [0...4672] (env.num_distinct_actions())
-        print(info_batch)
-        # How do I populate info_batch?
-        import pdb
-        pdb.set_trace()
 
-        # Need to sample from the proper action space
-        # Alternatively, a numpy array would work here as well.
-        # e.g.: np.array([random.choice([0, 1])] * len(obs_batch))
-        return [self.action_space_for_sampling.sample() for _ in obs_batch], [], {}
+        # Pick a random legal move from state.legal_actions()
+        if info_batch[0] != 0:
+            legal_actions = info_batch[0]['state'].legal_actions()
+            actions = [np.random.choice(legal_actions) for _ in obs_batch]
+        else:
+            # TODO still need infos at the first state
+            actions = [self.action_space_for_sampling.sample()
+                       for _ in obs_batch]
+
+        return actions, [], {}
 
     @override(Policy)
     def compute_log_likelihoods(
