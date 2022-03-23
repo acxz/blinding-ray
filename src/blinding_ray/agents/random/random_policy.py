@@ -1,10 +1,12 @@
 import random
+from typing import Dict, Tuple
+
 import numpy as np
 from gym.spaces import Box
 from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils.annotations import override
-from ray.rllib.utils.typing import ModelWeights
+from ray.rllib.utils.typing import ModelGradients, ModelWeights, TensorType
 
 
 class RandomPolicy(Policy):
@@ -72,28 +74,33 @@ class RandomPolicy(Policy):
         prev_action_batch=None,
         prev_reward_batch=None,
     ):
-        # TODO: Make this empty or 0s
-        return np.array([random.random()] * len(obs_batch))
+        "No log likelihoods to compute."""
+        return np.array([0] * len(obs_batch))
 
     # not implemented loss
 
     @override(Policy)
     def load_batch_into_buffer(self, batch: SampleBatch,
                                buffer_index: int = 0) -> int:
-        print("am i tryna load")
-        import pdb
-        pdb.set_trace()
+        """No buffers to load batch into."""
         return 0
 
     # not implemented get_num_samples_loaded_into_buffer
 
     @override(Policy)
     def learn_on_loaded_batch(self, offset: int = 0, buffer_index: int = 0):
+        """No loaded batches to learn from."""
         return [0]
 
-    # not implemented compute_gradients
+    def compute_gradients(
+        self, postprocessed_batch: SampleBatch
+    ) -> Tuple[ModelGradients, Dict[str, TensorType]]:
+        """No gradients to compute."""
+        return None, None
 
-    # not implemented apply_gradients
+    def apply_gradients(self, gradients: ModelGradients) -> None:
+        """No gradients to apply."""
+        pass
 
     @override(Policy)
     def get_weights(self) -> ModelWeights:

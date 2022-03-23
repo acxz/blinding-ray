@@ -6,6 +6,7 @@ from ray.rllib.env.wrappers.open_spiel import OpenSpielEnv
 from ray.tune import register_env
 
 from blinding_ray.agents.random import RandomPolicy
+from blinding_ray.agents.attacker import AttackerPolicy
 
 # RBC OpenSpiel env
 register_env("open_spiel_env_rbc", lambda _: OpenSpielEnv(
@@ -48,13 +49,12 @@ config = {
 
 # Create our RLlib trainer
 trainer = Trainer(config=config)
-# trainer = AttackerTrainer(config=config)
 
 # Run training iterations
-#print("Training")
-#iterations = 1
-#for _ in range(iterations):
-#    print(trainer.train())
+print("Training")
+iterations = 1
+for _ in range(iterations):
+    print(trainer.train())
 
 # Run evaluation
 print("Evaluating")
