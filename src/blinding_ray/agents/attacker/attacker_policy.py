@@ -1,12 +1,11 @@
 # Based on the attacker implementation bot from reconchess.
 # See: https://github.com/reconnaissanceblindchess/reconchess/blob/master/reconchess/bots/attacker_bot.py
-# TODO: Need to implement, right now just shell of RandomPolicy
 
 import random
 from typing import Dict, Tuple
 
+import chess
 import numpy as np
-from gym.spaces import Box
 from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils.annotations import override
@@ -18,22 +17,29 @@ class AttackerPolicy(Policy):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Whether for compute_actions, the bounds given in action_space
-        # should be ignored (default: False). This is to test action-clipping
-        # and any Env's reaction to bounds breaches.
-        if self.config.get("ignore_action_bounds", False) and isinstance(
-            self.action_space, Box
-        ):
-            self.action_space_for_sampling = Box(
-                -float("inf"),
-                float("inf"),
-                shape=self.action_space.shape,
-                dtype=self.action_space.dtype,
-            )
-        else:
-            self.action_space_for_sampling = self.action_space
+        # move sequences from white's perspective
+        # flipped at runtime if playing as black
+        quick_attacks = [
+            # queen-side knight attacks
+            [chess.Move(chess.B1, chess.C3), chess.Move(chess.C3, chess.B5),
+             chess.Move(chess.B5, chess.D6), chess.Move(chess.D6, chess.E8)],
+            [chess.Move(chess.B1, chess.C3), chess.Move(chess.C3, chess.E4),
+             chess.Move(chess.E4, chess.F6), chess.Move(chess.F6, chess.E8)],
 
-    @override(Policy)
+            # king-side knight attacks
+            [chess.Move(chess.G1, chess.H3), chess.Move(chess.H3, chess.F4),
+             chess.Move(chess.F4, chess.H5), chess.Move(chess.H5, chess.F6),
+             chess.Move(chess.F6, chess.E8)],
+
+            # four move mates
+            [chess.Move(chess.E2, chess.E4), chess.Move(chess.F1, chess.C4),
+             chess.Move(chess.D1, chess.H5), chess.Move(chess.C4, chess.F7),
+             chess.Move(chess.F7, chess.E8), chess.Move(chess.H5, chess.E8)],
+        ]
+
+        self.move_sequence = random.choice(quick_attacks)
+
+    @ override(Policy)
     def compute_actions(
         self,
         obs_batch,
@@ -58,13 +64,57 @@ class AttackerPolicy(Policy):
         # sensing has action space from [0...35]
         # moving has action space from [0...4672] (env.num_distinct_actions())
 
-        # Pick a random legal move from state.legal_actions()
         if info_batch[0] != 0:
-            legal_actions = info_batch[0]['state'].legal_actions()
-            actions = [np.random.choice(legal_actions) for _ in obs_batch]
+            state = info_batch[0]['state']
+            black = 0
+            if state.current_player() == black:
+                chess_move_sequence = list(
+                    map(flipped_move, self.move_sequence))
+            else:
+                chess_move_sequence = self.move_sequence
+
+            # TODO: move to render env
+            board = chess.Board(state.__str__())
+            #print(board)
+
+            # Legal actions that can be taken this turn
+            legal_actions = state.legal_actions()
+            legal_action_strings = \
+                [state.action_to_string(state.current_player(), legal_action)
+                 for legal_action in legal_actions]
+
+            # Convert move_sequence to action space actions
+            move_sequence = []
+            for move in chess_move_sequence:
+                move_string = move.uci()
+                if move_string in legal_action_strings:
+                    openspiel_action = state.string_to_action(
+                        state.current_player(), move_string)
+                    move_sequence.append(openspiel_action)
+
+            if legal_actions == list(range(0, 36)):
+                phase = 'sensing'
+            else:
+                phase = 'moving'
+
+            if phase == 'sensing':
+                # Pick a random legal move for sensing
+                actions = [np.random.choice(legal_actions) for _ in obs_batch]
+            else:
+                while (len(move_sequence) > 0 and
+                        move_sequence[0] not in legal_actions):
+                    move_sequence.pop(0)
+
+                if len(move_sequence) == 0:
+                    # pass... we failed so give up
+                    # action value of 0 corresponds to pass
+                    actions = [0 for _ in obs_batch]
+                else:
+                    # umm gotta pop for all obs_batch?
+                    actions = [move_sequence.pop(0)]
         else:
             # TODO still need infos at the first state
-            actions = [self.action_space_for_sampling.sample()
+            actions = [self.action_space.sample()
                        for _ in obs_batch]
 
         return actions, [], {}
@@ -119,3 +169,15 @@ class AttackerPolicy(Policy):
     # not implemented export_checkpoint
 
     # not implemented import_model_from_h5
+
+# Maybe import this directly from reconchess and depend on it
+
+
+def flipped_move(move):
+    def flipped(square):
+        return chess.square(chess.square_file(square),
+                            7 - chess.square_rank(square))
+
+    return chess.Move(from_square=flipped(move.from_square),
+                      to_square=flipped(move.to_square),
+                      promotion=move.promotion, drop=move.drop)
