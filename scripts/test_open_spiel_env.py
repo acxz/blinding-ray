@@ -1,3 +1,5 @@
+import random
+
 import pyspiel
 from ray.rllib.policy.policy import PolicySpec
 from ray.rllib.agents.ppo import PPOTrainer
@@ -14,8 +16,13 @@ register_env("open_spiel_env_rbc", lambda _: OpenSpielEnv(
 
 # Policy Mapping from Agent ID to Policy ID
 def policy_mapping_fn(agent_id, episode, worker, **kwargs):
-    if (agent_id == 0):
-        policy_id = "agent"
+    # Choose a random side for player and opponent
+    # agent_id = 1: white
+    # agent_id = 0: black
+    colors = [1, 0]
+    player_color = random.choice(colors)
+    if (agent_id == player_color):
+        policy_id = "player"
     else:
         policy_id = "opponent"
 
@@ -30,7 +37,7 @@ config = {
     "log_sys_usage": True,
     "evaluation_num_workers": 1,
     "evaluation_config": {
-        "render_env": True, # This does not work if record_env is False
+        "render_env": False, # This does not work if record_env is False
         "record_env": True, # Is this even recording?
     },
     "num_gpus": 0,
@@ -38,12 +45,11 @@ config = {
     "output_compress_columns": ["obs", "new_obs"],
     "multiagent": {
        "policies": {
-           # Figure this out, prob the answer to know our opponent
-           "agent": PolicySpec(policy_class=AttackerPolicy),
+           "player": PolicySpec(policy_class=AttackerPolicy),
            "opponent": PolicySpec(policy_class=RandomPolicy),
        },
        "policy_mapping_fn": policy_mapping_fn,
-       "policies_to_train": ["agent"],
+       "policies_to_train": ["player"],
     },
 }
 
@@ -51,10 +57,10 @@ config = {
 trainer = Trainer(config=config)
 
 # Run training iterations
-print("Training")
-iterations = 1
-for _ in range(iterations):
-    print(trainer.train())
+#print("Training")
+#iterations = 1
+#for _ in range(iterations):
+#    print(trainer.train())
 
 # Run evaluation
 print("Evaluating")
