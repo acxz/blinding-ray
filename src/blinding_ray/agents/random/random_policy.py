@@ -1,7 +1,6 @@
 # Based on the attacker implementation bot from reconchess.
 # See: https://github.com/reconnaissanceblindchess/reconchess/blob/master/reconchess/bots/random_bot.py
 
-import random
 from typing import Dict, Tuple
 
 import numpy as np
@@ -17,21 +16,6 @@ class RandomPolicy(Policy):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Whether for compute_actions, the bounds given in action_space
-        # should be ignored (default: False). This is to test action-clipping
-        # and any Env's reaction to bounds breaches.
-        if self.config.get("ignore_action_bounds", False) and isinstance(
-            self.action_space, Box
-        ):
-            self.action_space_for_sampling = Box(
-                -float("inf"),
-                float("inf"),
-                shape=self.action_space.shape,
-                dtype=self.action_space.dtype,
-            )
-        else:
-            self.action_space_for_sampling = self.action_space
-
     @override(Policy)
     def compute_actions(
         self,
@@ -45,25 +29,14 @@ class RandomPolicy(Policy):
         timestep,
         **kwargs
     ):
-        # one env step it sense, the next is action, the next is sense, ...
-
-        # See: https://github.com/deepmind/open_spiel/blob/master/open_spiel/python/pybind11/pyspiel.cc
-        # for pyspiel api
-
-        # openspiel has no method for state.get_phase() to determine if
-        # sensing or moving
-        # Thus the state.legal_actions() is used to determine which phase
-        # Could use the observation space directly, but hard to read from
-        # sensing has action space from [0...35]
-        # moving has action space from [0...4672] (env.num_distinct_actions())
-
         # Pick a random legal move from state.legal_actions()
         if info_batch[0] != 0:
-            legal_actions = info_batch[0]['state'].legal_actions()
+            state = info_batch[0]['state']
+            legal_actions = state.legal_actions()
             actions = [np.random.choice(legal_actions) for _ in obs_batch]
         else:
             # TODO still need infos at the first state
-            actions = [self.action_space_for_sampling.sample()
+            actions = [self.action_space.sample()
                        for _ in obs_batch]
 
         return actions, [], {}

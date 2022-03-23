@@ -10,34 +10,14 @@ from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import ModelGradients, ModelWeights, TensorType
+from reconchess.bots.attacker_bot import flipped_move, QUICK_ATTACKS
 
 
 class AttackerPolicy(Policy):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # move sequences from white's perspective
-        # flipped at runtime if playing as black
-        quick_attacks = [
-            # queen-side knight attacks
-            [chess.Move(chess.B1, chess.C3), chess.Move(chess.C3, chess.B5),
-             chess.Move(chess.B5, chess.D6), chess.Move(chess.D6, chess.E8)],
-            [chess.Move(chess.B1, chess.C3), chess.Move(chess.C3, chess.E4),
-             chess.Move(chess.E4, chess.F6), chess.Move(chess.F6, chess.E8)],
-
-            # king-side knight attacks
-            [chess.Move(chess.G1, chess.H3), chess.Move(chess.H3, chess.F4),
-             chess.Move(chess.F4, chess.H5), chess.Move(chess.H5, chess.F6),
-             chess.Move(chess.F6, chess.E8)],
-
-            # four move mates
-            [chess.Move(chess.E2, chess.E4), chess.Move(chess.F1, chess.C4),
-             chess.Move(chess.D1, chess.H5), chess.Move(chess.C4, chess.F7),
-             chess.Move(chess.F7, chess.E8), chess.Move(chess.H5, chess.E8)],
-        ]
-
-        self.move_sequence = random.choice(quick_attacks)
+        self.move_sequence = random.choice(QUICK_ATTACKS)
 
     @ override(Policy)
     def compute_actions(
@@ -52,18 +32,6 @@ class AttackerPolicy(Policy):
         timestep,
         **kwargs
     ):
-        # one env step it sense, the next is action, the next is sense, ...
-
-        # See: https://github.com/deepmind/open_spiel/blob/master/open_spiel/python/pybind11/pyspiel.cc
-        # for pyspiel api
-
-        # openspiel has no method for state.get_phase() to determine if
-        # sensing or moving
-        # Thus the state.legal_actions() is used to determine which phase
-        # Could use the observation space directly, but hard to read from
-        # sensing has action space from [0...35]
-        # moving has action space from [0...4672] (env.num_distinct_actions())
-
         if info_batch[0] != 0:
             state = info_batch[0]['state']
             black = 0
@@ -169,15 +137,3 @@ class AttackerPolicy(Policy):
     # not implemented export_checkpoint
 
     # not implemented import_model_from_h5
-
-# Maybe import this directly from reconchess and depend on it
-
-
-def flipped_move(move):
-    def flipped(square):
-        return chess.square(chess.square_file(square),
-                            7 - chess.square_rank(square))
-
-    return chess.Move(from_square=flipped(move.from_square),
-                      to_square=flipped(move.to_square),
-                      promotion=move.promotion, drop=move.drop)
