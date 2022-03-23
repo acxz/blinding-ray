@@ -1,7 +1,6 @@
 # Based on the trout implementation bot from reconchess.
-# See: https://github.com/reconnaissanceblindchess/reconchess/blob/master/reconchess/bots/trout.py
+# See: https://github.com/reconnaissanceblindchess/reconchess/blob/master/reconchess/bots/trout_bot.py
 
-import random
 from typing import Dict, Tuple
 
 import chess
@@ -10,14 +9,14 @@ from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import ModelGradients, ModelWeights, TensorType
-from reconchess.bots.attacker_bot import flipped_move, QUICK_ATTACKS
+from reconchess.bots.attacker_bot import flipped_move
 
 
 class TroutPolicy(Policy):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.move_sequence = random.choice(QUICK_ATTACKS)
+        self.move_sequence = 0
 
     @ override(Policy)
     def compute_actions(
@@ -40,10 +39,6 @@ class TroutPolicy(Policy):
                     map(flipped_move, self.move_sequence))
             else:
                 chess_move_sequence = self.move_sequence
-
-            # TODO: move to render env
-            board = chess.Board(state.__str__())
-            # print(board)
 
             # Legal actions that can be taken this turn
             legal_actions = state.legal_actions()

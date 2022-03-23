@@ -1,12 +1,13 @@
 import pyspiel
 from ray.rllib.policy.policy import PolicySpec
+from ray.rllib.agents.callbacks import MultiCallbacks
 from ray.rllib.agents.trainer import Trainer
 from ray.rllib.env.wrappers.open_spiel import OpenSpielEnv
 from ray.tune import register_env
 
-from blinding_ray.agents.attacker import AttackerPolicy, AttackerCallbacks
+from blinding_ray.agents.attacker import AttackerCallbacks, AttackerPolicy
 from blinding_ray.agents.random import RandomPolicy
-from blinding_ray.agents.trout import TroutPolicy
+from blinding_ray.agents.trout import TroutCallbacks, TroutPolicy
 
 # RBC OpenSpiel env
 register_env("open_spiel_env_rbc", lambda _: OpenSpielEnv(
@@ -18,8 +19,8 @@ register_env("open_spiel_env_rbc", lambda _: OpenSpielEnv(
 def policy_mapping_fn(agent_id, episode, worker, **kwargs):
     # player and opponent are the two policies that play against each other
     # See the policies dict in trainer config for what values these can be
-    player = "attacker"
-    opponent = "random"
+    player = "trout"
+    opponent = "attacker"
     # Choose a side for player and opponent based on the episode_id
     player_color = episode.episode_id % 2
     if agent_id == player_color:
@@ -56,7 +57,10 @@ config = {
         "policy_mapping_fn": policy_mapping_fn,
         "policies_to_train": None,
     },
-    "callbacks": AttackerCallbacks,
+    "callbacks": MultiCallbacks([
+        AttackerCallbacks,
+        TroutCallbacks,
+    ]),
 }
 
 # Create our RLlib trainer
