@@ -13,14 +13,13 @@ from blinding_ray.agents.trout import TroutCallbacks, TroutPolicy
 register_env("open_spiel_env_rbc", lambda _: OpenSpielEnv(
     pyspiel.load_game("rbc")))
 
-# Policy Mapping from Agent ID to Policy ID
 
-
-def policy_mapping_fn(agent_id, episode, worker, **kwargs):
+def policy_mapping_fn(agent_id, episode, worker, player="trout", opponent="attacker", **kwargs):
+    # Policy Mapping from Agent ID to Policy ID
     # player and opponent are the two policies that play against each other
     # See the policies dict in trainer config for what values these can be
-    player = "trout"
-    opponent = "attacker"
+    # agent_id = 1: white
+    # agent_id = 0: black
     # Choose a side for player and opponent based on the episode_id
     player_color = episode.episode_id % 2
     if agent_id == player_color:
@@ -67,11 +66,11 @@ config = {
 trainer = Trainer(config=config)
 
 # Run training iterations
-print("Training")
-ITERATIONS = 1
-for _ in range(ITERATIONS):
-    trainer.train()
+# print("Training")
+#ITERATIONS = 1
+# for _ in range(ITERATIONS):
+#    trainer.train()
 
 # Run evaluation
-# print("Evaluating")
-# trainer.evaluate()
+print("Evaluating")
+trainer.evaluate()

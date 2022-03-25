@@ -16,7 +16,11 @@ class TroutPolicy(Policy):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.move_sequence = 0
+
+        self.board = None
+        self.color = None
+        self.my_piece_captured_square = None
+        self.engine = None
 
     @ override(Policy)
     def compute_actions(
@@ -33,27 +37,22 @@ class TroutPolicy(Policy):
     ):
         if info_batch[0] != 0:
             state = info_batch[0]['state']
-            black = 0
-            if state.current_player() == black:
-                chess_move_sequence = list(
-                    map(flipped_move, self.move_sequence))
-            else:
-                chess_move_sequence = self.move_sequence
+
+            # Parse observation string
+            observed_board, castling_rights, phase, capture, color, \
+                illegal_move = parse_observation_string(state)
+
+            # TODO: handle opponent_move_result
+            #self.my_piece_captured_square = capture_square
+            # if captured_my_piece:
+            #    self.board.remove_piece_at(capture_square)
+            # choose_sense
+            # handle_sense_result
+            # choose_move
+            # handle_move_result
 
             # Legal actions that can be taken this turn
             legal_actions = state.legal_actions()
-            legal_action_strings = \
-                [state.action_to_string(state.current_player(), legal_action)
-                 for legal_action in legal_actions]
-
-            # Convert move_sequence to action space actions
-            move_sequence = []
-            for move in chess_move_sequence:
-                move_string = move.uci()
-                if move_string in legal_action_strings:
-                    openspiel_action = state.string_to_action(
-                        state.current_player(), move_string)
-                    move_sequence.append(openspiel_action)
 
             if legal_actions == list(range(0, 36)):
                 phase = 'sensing'
@@ -64,17 +63,9 @@ class TroutPolicy(Policy):
                 # Pick a random legal move for sensing
                 actions = [np.random.choice(legal_actions) for _ in obs_batch]
             else:
-                while (len(move_sequence) > 0 and
-                        move_sequence[0] not in legal_actions):
-                    move_sequence.pop(0)
-
-                if len(move_sequence) == 0:
-                    # pass... we failed so give up
-                    # action value of 0 corresponds to pass
-                    actions = [0 for _ in obs_batch]
-                else:
-                    # umm gotta pop for all obs_batch?
-                    actions = [move_sequence.pop(0)]
+                # pass... we failed so give up
+                # action value of 0 corresponds to pass
+                actions = [0 for _ in obs_batch]
         else:
             # TODO still need infos at the first state
             actions = [self.action_space.sample()
@@ -132,3 +123,45 @@ class TroutPolicy(Policy):
     # not implemented export_checkpoint
 
     # not implemented import_model_from_h5
+
+
+def parse_observation_string(state):
+    # See: https://github.com/deepmind/open_spiel/blob/master/open_spiel/games/rbc.cc#L164
+
+    # observed board
+    obs_str = state.observation_string()
+    split_slash_obs_str = obs_str.split('/')
+    partial_observed_board = '/'.join(
+        split_slash_obs_str[0:-1])
+    last_slash_obs_str = split_slash_obs_str[-1]
+    remaining_obs_str = last_slash_obs_str
+    last_board_row = ""
+    board_cols = 8
+    last_row_count = 0
+    for char in last_slash_obs_str:
+        if last_row_count < board_cols:
+            last_board_row = last_board_row + char
+            remaining_obs_str = remaining_obs_str[1:None]
+        if char.isdigit():
+            last_row_count = last_row_count + int(char)
+        else:
+            last_row_count = last_row_count + 1
+    observed_board = '/'.join([partial_observed_board, last_board_row])
+
+    # castling rights
+    split_space_rem_obs_str = remaining_obs_str.split(' ')[1:None]
+    castling_rights = split_space_rem_obs_str[0]
+
+    # phase
+    phase = split_space_rem_obs_str[1]
+
+    # capture
+    capture = split_space_rem_obs_str[2]
+
+    # color
+    color = split_space_rem_obs_str[3]
+
+    # illegal move
+    illegal_move = split_space_rem_obs_str[4]
+
+    return observed_board, castling_rights, phase, capture, color, illegal_move
