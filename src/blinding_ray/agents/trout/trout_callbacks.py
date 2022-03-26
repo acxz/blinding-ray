@@ -22,22 +22,21 @@ class TroutCallbacks(DefaultCallbacks):
         trout_id = 'trout'
         trout_policy = policies[trout_id]
 
+        # Create internal representation of the board to keep track of
         trout_policy.board = chess.Board()
 
-        # Maybe can get the info from base_env
-        # use policy mapping and initial state to get the color somehow
-
+        # use policy mapping to get the color
         white_player = episode.policy_mapping_fn(
             int(chess.WHITE), episode, worker)
         black_player = episode.policy_mapping_fn(
             int(chess.BLACK), episode, worker)
 
         if trout_id == white_player:
-            self.color = chess.WHITE
+            trout_policy.color = chess.WHITE
         if trout_id == black_player:
-            self.color = chess.BLACK
+            trout_policy.color = chess.BLACK
 
-        # TODO: This should just happen in policy init
+        # TODO: stockfish creation should just happen in policy init
         # no need to do this every time episode starts
         # problem: how to kill the engine via this method
         # need to kill it when the policy class ends
