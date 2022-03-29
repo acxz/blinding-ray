@@ -1,15 +1,16 @@
 # Based on the trout implementation bot from reconchess.
 # See: https://github.com/reconnaissanceblindchess/reconchess/blob/master/reconchess/bots/trout_bot.py
 
+import copy
 from typing import Dict, Tuple
 
 import chess
 import numpy as np
+import pyspiel
 from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import ModelGradients, ModelWeights, TensorType
-from reconchess.bots.attacker_bot import flipped_move
 
 
 class TroutPolicy(Policy):
@@ -23,9 +24,11 @@ class TroutPolicy(Policy):
         self.engine = None
 
         # This is a hack needed to obtain functionality of action_to_string
-        # while the phase is move, instead of sense
+        # while the phase is move instead of sense and vice versa
         # See: https://github.com/deepmind/open_spiel/blob/062416fdd173424440acfa8938867df8b9e22735/open_spiel/games/rbc.cc#L444-L454
+        # Note prev_state needs to be set before any return statement
         self.prev_state = None
+        self.first_move = True
 
     @ override(Policy)
     def compute_actions(
@@ -40,13 +43,15 @@ class TroutPolicy(Policy):
         timestep,
         **kwargs
     ):
-        # TODO: need to use state_batches instead of self for persistant data
+        # MAYBE: need to use state_batches instead of self for persistant data
         # across the policy do I tho?
 
         # TODO: This entire method needs to be batched
         # for now deal with batch=1
         if info_batch[0] != 0:
             state = info_batch[0]['state']
+            legal_actions = state.legal_actions()
+            state_board = chess.Board(state.__str__())
 
             # Parse observation string
             observed_board, castling_rights, phase, capture, color, \
@@ -57,6 +62,11 @@ class TroutPolicy(Policy):
 
                 # TODO print that should be in env
                 print(chess.Board(state.__str__()))
+
+                # BUG: open_spiel records the moves commanded in state.history()
+                # not neccessarily the ones taken (i.e. if opt piece is in the
+                # motion of your bishop)
+                # Maybe take a look at exposing MovesHistory in open_spiel
 
                 # handle_move_result
                 # if a move was executed, apply it to our board
@@ -77,92 +87,155 @@ class TroutPolicy(Policy):
                     self.board.push(taken_move)
 
                 # TODO
-                # handle opponent_move_result
-                # Determine captured square
-                # self.my_piece_captured_square = capture_square
-                # if captured_my_piece:
-                #    self.board.remove_piece_at(capture_square)
+                # handle_opponent_move_result
+                # determine captured square
+                opponent_taken_action = state.history()[-1]
+                # if opponent passes just skip this
+                if opponent_taken_action != 0:
+                    opponent_taken_action_string = \
+                        self.prev_state.action_to_string(opponent_taken_action)
+                    opponent_taken_move = \
+                        chess.Move.from_uci(opponent_taken_action_string)
+                    opponent_capture_square = \
+                        chess.Square(opponent_taken_move.to_square)
+                    opponent_capture_square_file = \
+                        chess.square_name(opponent_capture_square)[0]
+                    opponent_capture_square_rank = \
+                        chess.square_name(opponent_capture_square)[-1]
+                    capture_square_file = opponent_capture_square_file
+                    # Flip the opponent_capture_square to match our side
+                    # Look at chess.square_mirror
+                    capture_square_rank = \
+                        str(9 - int(opponent_capture_square_rank))
+                    capture_square = chess.parse_square(capture_square_file +
+                                                        capture_square_rank)
+                    captured_piece = \
+                        self.board.piece_at(capture_square)
+                    # make sure the captured piece is one of ours and if so
+                    # remove our piece from our internal board
+                    my_piece = None
+                    if (captured_piece is not None and
+                            captured_piece.color == self.color):
+                        my_piece = captured_piece
+                    captured_my_piece = my_piece is not None
+                    if captured_my_piece:
+                        self.my_piece_captured_square = \
+                            capture_square
+                        self.board.remove_piece_at(capture_square)
+                    else:
+                        self.my_piece_captured_square = None
 
-                # TODO
                 # choose_sense
                 # if our piece was just captured, sense where it was captured
-                # if self.my_piece_captured_square:
-                #     return self.my_piece_captured_square
+                if self.my_piece_captured_square:
+                    open_spiel_action = convert_sense_action(
+                        state,
+                        self.my_piece_captured_square)
+                    actions = [open_spiel_action for _ in
+                               obs_batch]
 
-                # # if we might capture a piece when we move, sense where the capture will occur
-                # future_move = self.choose_move(move_actions, seconds_left)
-                # if future_move is not None and self.board.piece_at(future_move.to_square) is not None:
-                #     return future_move.to_square
+                    # retain copy of previous state to use for action to string
+                    self.prev_state = copy.copy(state)
+                    return actions, [], {}
 
-                # # otherwise, just randomly choose a sense action, but don't sense on a square where our pieces are located
-                # for square, piece in self.board.piece_map().items():
-                #     if piece.color == self.color:
-                #         sense_actions.remove(square)
-                # return random.choice(sense_actions)
-                # Pick a random legal move for sensing
-                legal_actions = state.legal_actions()
-                actions = [np.random.choice(legal_actions) for _ in obs_batch]
+                # if we might capture a piece when we move, sense where the capture will occur
+                future_move = self.choose_move()
+                if (future_move is not None and
+                        self.board.piece_at(future_move.to_square)
+                        is not None):
+                    open_spiel_action = convert_sense_action(
+                        state,
+                        future_move.to_square)
+                    if open_spiel_action in legal_actions:
+                        actions = [open_spiel_action for _ in obs_batch]
+                    else:
+                        # random fallback needed to due a bug in
+                        # convert_sense_action
+                        actions = [np.random.choice(legal_actions)
+                                   for _ in obs_batch]
+
+                    # retain copy of previous state to use for action to string
+                    self.prev_state = copy.copy(state)
+
+                    return actions, [], {}
+
+                # otherwise, just randomly choose a sense action, but don't sense on a square where our pieces are located
+                # UPGRADE: randomly choose where we get most info gain, i.e.
+                # instead of not choosing a square where our piece lives,
+                # not choosing a square where it would sense more of our pieces
+                # reconchess upstream idea
+                # problem you may never end up sensing an enemy piece if it is
+                # next to yours
+                # this would need to be paired with information loss over time
+                # to be useful
+                sense_actions = [*chess.SQUARES]
+                for square, piece in self.board.piece_map().items():
+                    if piece.color == self.color:
+                        sense_actions.remove(square)
+                # convert sense actions to actions in open_spiel format
+                open_spiel_actions = []
+                for sense_action in sense_actions:
+                    open_spiel_action = convert_sense_action(state,
+                                                             sense_action)
+                    if open_spiel_action in legal_actions:
+                        open_spiel_actions.append(open_spiel_action)
+                actions = [np.random.choice(open_spiel_actions)
+                           for _ in obs_batch]
+
+                # retain copy of previous state to use for action to string
+                self.prev_state = copy.copy(state)
 
                 return actions, [], {}
             else:
                 # (m)oving phase
 
-                # retain copy of previous state to use for action to string
-                import copy
-                self.prev_state = copy.copy(state)
-
-                # string_to_action may need self.prev_state if so need to move
-                # this line right before the return statement
-
                 # handle_sense_result
                 # add the pieces in the sense result to our board
-                # already handled in the observed_board variable
+                # observed_board variable keeps track of sensed results
+                # BUG it does not start with a prior on the opponent pieces
+                # i.e. there starting locations, thus we use the results
+                # directly from state and apply the sense results ourselves to
+                # self.board
+                # open_spiel upstream issue
+
+                prev_sense_action = state.history()[-1]
+                # dont have access to self.prev_state in the first move
+                # BUG: unfair advantage to white as white doesn't sense anything
+                # anyway
+                prev_sense_square = 'b2'  # dummy sense square for first move
+                if self.first_move:
+                    self.first_move = False
+                else:
+                    prev_sense_square = \
+                        self.prev_state.action_to_string(
+                            prev_sense_action)[-2:None]
+
+                sensed_squares = get_sense_grid(prev_sense_square)
+
+                for sensed_square in sensed_squares:
+                    sensed_piece = state_board.piece_at(sensed_square)
+                    self.board.set_piece_at(sensed_square, sensed_piece)
 
                 # choose_move
-                # if we might be able to take the king, try to
-                enemy_king_square = self.board.king(not self.color)
-                if enemy_king_square:
-                    # if there are any ally pieces that can take king, execute
-                    # one of those moves
-                    enemy_king_attackers = self.board.attackers(
-                        self.color, enemy_king_square)
-                    if enemy_king_attackers:
-                        attacker_square = enemy_king_attackers.pop()
-                        attack_action = chess.Move(
-                            attacker_square, enemy_king_square)
-                        # convert attack_action to action space actions
-                        attack_action_string = attack_action.uci()
-                        # TODO make this a helper method
-                        action = state.string_to_action(
-                            self.color, attack_action_string)
-                        actions = [action for _ in obs_batch]
-                        return actions, [], {}
-                # otherwise, try to move with the stockfish chess engine
-                try:
-                    self.board.turn = self.color
-                    self.board.clear_stack()
-                    result = self.engine.play(
-                        self.board, chess.engine.Limit(time=0.5))
-                    engine_action_string = result.move.uci()
-                    action = state.string_to_action(
-                        self.color, engine_action_string)
-                    actions = [action for _ in obs_batch]
-                    return actions, [], {}
-                except chess.engine.EngineTerminatedError:
-                    print('Stockfish Engine died')
-                except chess.engine.EngineError:
-                    print('Stockfish Engine bad state at "{}"'.format(
-                        self.board.fen()))
+                move_action = self.choose_move()
+                action = convert_move_action(state, move_action)
+                actions = [action for _ in obs_batch]
 
-            # if all else fails, pass
-            # action value of 0 corresponds to pass
-            actions = [0 for _ in obs_batch]
+                # retain copy of previous state to use for action to string
+                self.prev_state = copy.copy(state)
 
-            # TODO: fix up logic for return points
-            return actions, [], {}
-
+                return actions, [], {}
         else:
-            # TODO still need infos at the first state
+            # TODO still need infos at the first step/obs
+            # if self.color == chess.WHITE this is fine, since there is nothing
+            # to sense
+            # if self.color == chess.BLACK then we should:
+            # handle_move_result
+            # we didn't move yet so this is also fine
+            # handle_opponent_move_result
+            # for the first move of the game, no piece can be taken anyway so
+            # no need to handle
+            # choose_sense
             actions = [self.action_space.sample()
                        for _ in obs_batch]
             return actions, [], {}
@@ -218,6 +291,35 @@ class TroutPolicy(Policy):
 
     # not implemented import_model_from_h5
 
+    def choose_move(self):
+        # if we might be able to take the king, try to
+        enemy_king_square = self.board.king(not self.color)
+        if enemy_king_square:
+            # if there are any ally pieces that can take king, execute
+            # one of those moves
+            enemy_king_attackers = self.board.attackers(
+                self.color, enemy_king_square)
+            if enemy_king_attackers:
+                attacker_square = enemy_king_attackers.pop()
+                attack_action = chess.Move(
+                    attacker_square, enemy_king_square)
+                return attack_action
+        # otherwise, try to move with the stockfish chess engine
+        try:
+            self.board.turn = self.color
+            self.board.clear_stack()
+            result = self.engine.play(
+                self.board, chess.engine.Limit(time=0.5))
+            return result.move
+        except chess.engine.EngineTerminatedError:
+            print('Stockfish Engine died')
+        except chess.engine.EngineError:
+            print('Stockfish Engine bad state at "{}"'.format(
+                self.board.fen()))
+
+        # if all else fails, pass
+        return None
+
 
 def parse_observation_string(state):
     # See: https://github.com/deepmind/open_spiel/blob/master/open_spiel/games/rbc.cc#L164
@@ -259,3 +361,71 @@ def parse_observation_string(state):
     illegal_move = split_space_rem_obs_str[4]
 
     return observed_board, castling_rights, phase, capture, color, illegal_move
+
+
+def convert_sense_action(state, sense_action):
+    sense_string = "Sense " + chess.square_name(sense_action)
+
+    # FIXME open_spiel has a bug on the mapping of sense actions
+    # it tries to reduce sense space with the inner game board
+    # 6x6 but fails to account shift the squares to be in the
+    # middle 6x6
+    # See: https://github.com/deepmind/open_spiel/blob/master/open_spiel/games/rbc.cc#L423
+    # Thus we try/except and filter from legal_actions
+    try:
+        open_spiel_action = state.string_to_action(
+            sense_string)
+        return open_spiel_action
+    except (pyspiel.SpielError) as e:
+        return None
+
+
+def convert_move_action(state, move_action):
+    # convert move action to action space actions
+    # value of 0 corresponds to pass
+    open_spiel_action = 0
+    if move_action is not None:
+        move_action_string = move_action.uci()
+        open_spiel_action = state.string_to_action(move_action_string)
+
+    return open_spiel_action
+
+
+def get_sense_grid(sense_square):
+    file = sense_square[0]
+    rank = sense_square[1]
+    sense_grid = []
+    file_min_offset = -1
+    file_max_offset = 1
+    rank_min_offset = -1
+    rank_max_offset = 1
+    if file == 'a':
+        file_min_offset = 0
+    if file == 'h':
+        file_max_offset = 0
+    if rank == '1':
+        rank_min_offset = 0
+    if rank == '8':
+        rank_max_offset = 0
+    for file_offset in range(file_min_offset, file_max_offset+1):
+        new_file = chr(ord(file) + file_offset)
+        for rank_offset in range(rank_min_offset, rank_max_offset+1):
+            new_rank = str(int(rank) + rank_offset)
+            new_square = new_file + new_rank
+            sense_grid.append(chess.parse_square(new_square))
+
+    return sense_grid
+
+# From: https://github.com/reconnaissanceblindchess/reconchess/blob/96c7cbaee9351ddf7eccd1334a6f23ff10d2bfe8/reconchess/utilities.py#L61
+
+
+def capture_square_of_move(board, move):
+    capture_square = None
+    if move is not None and board.is_capture(move):
+        if board.is_en_passant(move):
+            # taken from :func:`chess.Board.push()`
+            down = -8 if board.turn == chess.WHITE else 8
+            capture_square = board.ep_square + down
+        else:
+            capture_square = move.to_square
+    return capture_square
