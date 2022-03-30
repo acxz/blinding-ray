@@ -14,7 +14,9 @@ register_env("open_spiel_env_rbc", lambda _: OpenSpielEnv(
     pyspiel.load_game("rbc")))
 
 
-def policy_mapping_fn(agent_id, episode, worker, player="trout", opponent="attacker", **kwargs):
+def policy_mapping_fn(agent_id, episode, worker, player="trout",
+                      opponent="random", **kwargs):
+    # TODO: Playing trout vs trout may not work as the policiesID will overlap
     # Policy Mapping from Agent ID to Policy ID
     # player and opponent are the two policies that play against each other
     # See the policies dict in trainer config for what values these can be
@@ -66,11 +68,13 @@ config = {
 trainer = Trainer(config=config)
 
 # Run training iterations
-# print("Training")
+#print("Training")
 #ITERATIONS = 1
-# for _ in range(ITERATIONS):
+#for _ in range(ITERATIONS):
 #    trainer.train()
 
 # Run evaluation
 print("Evaluating")
-trainer.evaluate()
+EVAL_ITERATIONS = 20
+for _ in range(EVAL_ITERATIONS):
+    trainer.evaluate()
