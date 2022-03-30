@@ -30,7 +30,6 @@ Have default planner in trout: stockfish
 3. Use RL for both estimator and planner
     Do this after we can get at least a better estimator or planner
 
-
 Control flow with inputs:
 
 perceived board state:
@@ -63,19 +62,25 @@ loss function input: ?
 
 remember we can just IRL on top of both Trout's sensor and planner
 
-// Report Due: 3/22/22
+// Report Due: 3/24/22
 
 start off with loading in env and creating a simple agent for it
 Then create an IRL Policy/Trainer
 
 Run rllib env (okay it runs!)
-Implement Random, Attacker, and Trout via rllib env
+# TODO make a child env from the open_spiel env to have our own render function
 
-Okay now create random rllib agent (done!)
-And: https://github.com/ray-project/ray/blob/master/rllib/examples/policy/random_policy.py
-Our random policy is fundamentally different since we are based on random legal
-actions and not random of all actions
-To get the info state need the following patch in
+Implement Random, Attacker, and Trout via rllib env (done!)
+
+Implement a vanilla RL alg
+Code & Implement IRL alg
+
+Tensorboard viewing:
+tensorboard --logdir ~/ray_results/... (Just the dir not the actual json)
+
+Imp upstream: (other issues and bugs listed in code comments)
+
+To get the info state need the following patch in (upstream)
 /rllib/evaluation/collectors/simple_list_collector.py
 ```python
             # (acxz) add INFOS
@@ -84,37 +89,8 @@ To get the info state need the following patch in
                 SampleBatch.AGENT_INDEX, SampleBatch.T, SampleBatch.INFOS
             ] else 0
 ```
-Note: This doesn't solve the first action tho
+Note: This doesn't solve the fact that we don't get an info for the first obs
 
-TODO: how to get the match data and play it back with reconchess's rc-replay
-script (at the very least i just wanna gui the game)
-okay state is being saved in output.json via infos
-now need to parse output.json and write the state sequence to rc-replay compat
-json (do i also need sense actions?)
-Whoa need a lot more than I thought
-Make feature request for rbc openspiel to add output in APL format and then from
-rllib env wrapper, I can just do `infos = {self.gamehistory}`
-I guess till then I can't really see nice gui...
-since if openspiel adds that functionality to rbc then
-they need it for everything? (maybe it would just a rbc utility function?)
-idk maybe still possible through just rllib env wrapper,
-I just need the function mapping as the game is being played
-but it would be a good bit of work that we can put off for now, I think
-one last thing, see if openspiel does have some kinda of game history output for
-rbc (maybe with state->ActionToString)
-
-Also who is my opponent? The big questions man lol
-I think we found the answer to this with the multiagent policies config
-
-Okay now create Attacker rllib agent
-
-Implement a vanilla RL alg
-Code & Implement IRL alg
-
-Tensorboard viewing:
-tensorboard --logdir ~/ray_results/... (Just the dir not the actual json)
-
-Imp upstream:
 open_spiel rbc dones't always have good checks and return pyspiel.SpielError
 Thus we need to do a manually assertion in the ray/rllib/env/wrappers/open_spiel
 file:
@@ -135,3 +111,27 @@ file:
                     np.random.choice(self.state.legal_actions()))
                 penalties[curr_player] = -0.1
 ```
+
+Add human play to evaluation as a demonstration
+
+TODO: how to get the match data and play it back with reconchess's rc-replay
+script (at the very least i just wanna gui the game)
+okay state is being saved in output.json via infos
+now need to parse output.json and write the state sequence to rc-replay compat
+json (do i also need sense actions?)
+Whoa need a lot more than I thought
+Make feature request for rbc openspiel to add output in APL format and then from
+rllib env wrapper, I can just do `infos = {self.gamehistory}`
+I guess till then I can't really see nice gui...
+since if openspiel adds that functionality to rbc then
+they need it for everything? (maybe it would just a rbc utility function?)
+idk maybe still possible through just rllib env wrapper,
+I just need the function mapping as the game is being played
+but it would be a good bit of work that we can put off for now, I think
+one last thing, see if openspiel does have some kinda of game history output for
+rbc (maybe with state->ActionToString)
+right now work with ascii chess.board representation (does rbc have their own
+ascci repr? need for sensing)
+
+Add a wrapper on the RBC bot API to creating a RL policy in rllib for easier
+implementation of bots in both rllib open_spiel and APL's rbc servers
