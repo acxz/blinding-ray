@@ -27,6 +27,10 @@ class TroutPolicy(Policy):
         # while the phase is move instead of sense and vice versa
         # See: https://github.com/deepmind/open_spiel/blob/062416fdd173424440acfa8938867df8b9e22735/open_spiel/games/rbc.cc#L444-L454
         # Note prev_state needs to be set before any return statement
+        # BUG: action_to_string and string_to_action should work even if moves
+        # are not legal_actions at the current state, they should also take the
+        # current phase (sense/move) and use that instead of depending on the
+        # phase from the state object
         self.prev_state = None
         self.first_move = True
 
@@ -61,6 +65,7 @@ class TroutPolicy(Policy):
             if phase == 's':
 
                 # TODO print that should be in env
+                print()
                 print(chess.Board(state.__str__()))
 
                 # BUG: open_spiel records the moves commanded in state.history()
@@ -81,12 +86,12 @@ class TroutPolicy(Policy):
                 taken_action = player_taken_action_history[-1]
                 # transform action into string
                 taken_action_string = self.prev_state.action_to_string(
-                    self.color, taken_action)
-                taken_move = chess.Move.from_uci(taken_action_string)
-                if taken_move is not None:
+                    taken_action)
+                # if taken action was pass then don't push to board
+                if taken_action_string != 'pass':
+                    taken_move = chess.Move.from_uci(taken_action_string)
                     self.board.push(taken_move)
 
-                # TODO
                 # handle_opponent_move_result
                 # determine captured square
                 opponent_taken_action = state.history()[-1]
@@ -160,14 +165,6 @@ class TroutPolicy(Policy):
                     return actions, [], {}
 
                 # otherwise, just randomly choose a sense action, but don't sense on a square where our pieces are located
-                # UPGRADE: randomly choose where we get most info gain, i.e.
-                # instead of not choosing a square where our piece lives,
-                # not choosing a square where it would sense more of our pieces
-                # reconchess upstream idea
-                # problem you may never end up sensing an enemy piece if it is
-                # next to yours
-                # this would need to be paired with information loss over time
-                # to be useful
                 sense_actions = [*chess.SQUARES]
                 for square, piece in self.board.piece_map().items():
                     if piece.color == self.color:
@@ -200,7 +197,7 @@ class TroutPolicy(Policy):
 
                 prev_sense_action = state.history()[-1]
                 # dont have access to self.prev_state in the first move
-                # BUG: unfair advantage to white as white doesn't sense anything
+                # ISSUE: unfair advantage to white as white doesn't sense anything
                 # anyway
                 prev_sense_square = 'b2'  # dummy sense square for first move
                 if self.first_move:
@@ -366,7 +363,7 @@ def parse_observation_string(state):
 def convert_sense_action(state, sense_action):
     sense_string = "Sense " + chess.square_name(sense_action)
 
-    # FIXME open_spiel has a bug on the mapping of sense actions
+    # BUG: open_spiel has a bug on the mapping of sense actions
     # it tries to reduce sense space with the inner game board
     # 6x6 but fails to account shift the squares to be in the
     # middle 6x6
@@ -386,7 +383,22 @@ def convert_move_action(state, move_action):
     open_spiel_action = 0
     if move_action is not None:
         move_action_string = move_action.uci()
-        open_spiel_action = state.string_to_action(move_action_string)
+        # RBC requires pawn promotion to queen
+        # if pawn is moving to rank 8 or rank 1
+        if move_action_string[-1] == 8 or move_action_string[-1] == 1:
+            # Check if piece is pawn
+            chess_board = chess.Board(state.__str__())
+            if (chess_board.piece_type_at(move_action.from_square) ==
+                    chess.PAWN):
+                move_action_string = move_action_string + 'q'
+        # Remember since stockfish does not have access to the full board state
+        # it can try to perform an illegal action.
+        # If so, pass for the current move
+        open_spiel_action = 0
+        try:
+            open_spiel_action = state.string_to_action(move_action_string)
+        except pyspiel.SpielError as e:
+            print("Stockfish attempting an illegal move")
 
     return open_spiel_action
 
@@ -415,17 +427,3 @@ def get_sense_grid(sense_square):
             sense_grid.append(chess.parse_square(new_square))
 
     return sense_grid
-
-# From: https://github.com/reconnaissanceblindchess/reconchess/blob/96c7cbaee9351ddf7eccd1334a6f23ff10d2bfe8/reconchess/utilities.py#L61
-
-
-def capture_square_of_move(board, move):
-    capture_square = None
-    if move is not None and board.is_capture(move):
-        if board.is_en_passant(move):
-            # taken from :func:`chess.Board.push()`
-            down = -8 if board.turn == chess.WHITE else 8
-            capture_square = board.ep_square + down
-        else:
-            capture_square = move.to_square
-    return capture_square

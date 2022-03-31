@@ -41,6 +41,9 @@ class TroutCallbacks(DefaultCallbacks):
         # problem: how to kill the engine via this method
         # need to kill it when the policy class ends
 
+        # One benefit of this method is that if stockfish dies in the previous
+        # episode, we can restart stockfish on episode start
+
         # make sure stockfish environment variable exists
         if STOCKFISH_ENV_VAR not in os.environ:
             raise KeyError(
@@ -56,6 +59,10 @@ class TroutCallbacks(DefaultCallbacks):
         # initialize the stockfish engine
         trout_policy.engine = chess.engine.SimpleEngine.popen_uci(
             stockfish_path, setpgrp=True)
+
+        # Reset variables required for certain functionality
+        trout_policy.prev_state = None
+        trout_policy.first_move = True
 
     def on_episode_end(self, *, worker: "RolloutWorker", base_env: BaseEnv,
                        policies: Dict[PolicyID, Policy], episode: Episode,
