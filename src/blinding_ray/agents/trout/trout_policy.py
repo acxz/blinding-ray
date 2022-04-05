@@ -64,10 +64,6 @@ class TroutPolicy(Policy):
             # (s)ensing phase
             if phase == 's':
 
-                # TODO print that should be in env
-                print()
-                print(chess.Board(state.__str__()))
-
                 # BUG: open_spiel records the moves commanded in state.history()
                 # not neccessarily the ones taken (i.e. if opt piece is in the
                 # motion of your bishop)
