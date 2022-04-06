@@ -1,6 +1,7 @@
 # Callbacks that the Trout Policy requires
 
 import os
+import psutil
 from typing import Dict
 
 import chess
@@ -9,6 +10,7 @@ from ray.rllib.env import BaseEnv
 from ray.rllib.evaluation import Episode, RolloutWorker
 from ray.rllib.policy import Policy
 from ray.rllib.utils.typing import PolicyID
+from ray.train import Trainer
 from reconchess.bots.trout_bot import STOCKFISH_ENV_VAR
 
 
@@ -68,6 +70,9 @@ class TroutCallbacks(DefaultCallbacks):
                        policies: Dict[PolicyID, Policy], episode: Episode,
                        **kwargs) -> None:
 
+        # TODO: do we even need to kill stockfish at the end of episode just
+        # end of training right?
+
         # get trout policy
         trout_id = 'trout'
         trout_policy = policies[trout_id]
@@ -78,3 +83,24 @@ class TroutCallbacks(DefaultCallbacks):
             print("killing the fish")
         except chess.engine.EngineTerminatedError:
             pass
+
+    def on_train_result(self, *, trainer: "Trainer", result: dict,
+                        **kwargs) -> None:
+
+        # find and kill the last stockfish process
+
+        # get all children processes of current program run
+        children_processes = psutil.Process().children()
+
+        # find stockfish engine pid
+        engine_pid = None
+        for children_process in children_processes:
+            if children_process.name() == "stockfish":
+                engine_pid = children_process.pid
+
+        try:
+            engine_process = psutil.Process(engine_pid)
+            engine_process.terminate()
+            print("banishing the fish")
+        except:
+            print("prob already dead")

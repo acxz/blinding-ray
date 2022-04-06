@@ -69,13 +69,13 @@ config = {
 trainer = Trainer(config=config)
 
 # Run training iterations
-#print("Training")
-#ITERATIONS = 1
-#for _ in range(ITERATIONS):
-#    trainer.train()
+print("Training")
+ITERATIONS = 2
+for _ in range(ITERATIONS):
+    trainer.train()
 
 # Run evaluation
-print("Evaluating")
-EVAL_ITERATIONS = 1
-for _ in range(EVAL_ITERATIONS):
-    trainer.evaluate()
+#print("Evaluating")
+#EVAL_ITERATIONS = 1
+#for _ in range(EVAL_ITERATIONS):
+#    trainer.evaluate()
