@@ -20,6 +20,7 @@ setuptools.setup(
     install_requires=[
         'chess',
         'open-spiel',
+        'psutil',
         'ray[rllib]',
         'reconchess',
     ],
