@@ -12,6 +12,12 @@ To install this package run the following command within this directory:
 pip install .
 ```
 
+## Usage
+
+```bash
+python scripts/train_mceirl_rbc.py
+```
+
 ## Uninstall
 
 To uninstall the package:
