@@ -2,7 +2,7 @@
 
 ## Overview
 
-[MCEIRL](https://www.cs.cmu.edu/~bziebart/publications/maximum-causal-entropy.pdf) is a TODO.
+[MCEIRL](https://www.aaai.org/Papers/AAAI/2008/AAAI08-227.pdf) is a TODO.
 
 ## Documentation & Implementation
 
