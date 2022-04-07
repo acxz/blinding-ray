@@ -5,6 +5,7 @@ from ray.rllib.agents.trainer import Trainer
 from ray.tune import register_env
 
 from blinding_ray.agents.attacker import AttackerCallbacks, AttackerPolicy
+from blinding_ray.agents.mceirl import MCEIRLTorchPolicy, MCEIRLTrainer
 from blinding_ray.agents.random import RandomPolicy
 from blinding_ray.agents.trout import TroutCallbacks, TroutPolicy
 from blinding_ray.env.open_spiel_rbc import OpenSpielRbcEnv
@@ -15,7 +16,7 @@ register_env("open_spiel_rbc_env", lambda _: OpenSpielRbcEnv(
 
 
 def policy_mapping_fn(agent_id, episode, worker, player="trout",
-                      opponent="random", **kwargs):
+                      opponent="mceirl", **kwargs):
     # TODO: Playing trout vs trout may not work as the policiesID will overlap
     # Need to use policy state instead of just the self to prevent this issue
     # Policy Mapping from Agent ID to Policy ID
@@ -55,9 +56,10 @@ config = {
             "attacker": PolicySpec(policy_class=AttackerPolicy),
             "random": PolicySpec(policy_class=RandomPolicy),
             "trout": PolicySpec(policy_class=TroutPolicy),
+            "mceirl": PolicySpec(policy_class=MCEIRLTorchPolicy),
         },
         "policy_mapping_fn": policy_mapping_fn,
-        "policies_to_train": None,
+        "policies_to_train": [MCEIRLTorchPolicy],
     },
     "callbacks": MultiCallbacks([
         AttackerCallbacks,
@@ -66,11 +68,11 @@ config = {
 }
 
 # Create our RLlib trainer
-trainer = Trainer(config=config)
+trainer = MCEIRLTrainer(config=config)
 
 # Run training iterations
 print("Training")
-ITERATIONS = 2
+ITERATIONS = 1
 for _ in range(ITERATIONS):
     trainer.train()
 
