@@ -34,7 +34,7 @@ class TroutPolicy(Policy):
         self.prev_state = None
         self.first_move = True
 
-    @ override(Policy)
+    @override(Policy)
     def compute_actions(
         self,
         obs_batch,
@@ -365,6 +365,15 @@ def convert_sense_action(state, sense_action):
     # middle 6x6
     # See: https://github.com/deepmind/open_spiel/blob/master/open_spiel/games/rbc.cc#L423
     # Thus we try/except and filter from legal_actions
+
+    # convert sense_action ourselves to prevent annoying exception printout from
+    # open_spiel
+    sense_file = sense_string[-2]
+    sense_rank = sense_string[-1]
+
+    if sense_file in ['g', 'h'] or sense_rank in ['7', '8']:
+        sense_string = "Sense a1"
+
     try:
         open_spiel_action = state.string_to_action(
             sense_string)
