@@ -17,4 +17,7 @@ class AttackerCallbacks(DefaultCallbacks):
                          **kwargs) -> None:
 
         # Choose a different attack move sequence
-        policies['attacker'].move_sequence = random.choice(QUICK_ATTACKS)
+        #policies['attacker'].move_sequence = random.choice(QUICK_ATTACKS)
+        # Training wheels: only allow the attacker to choose one strat,
+        # Train against one attacker strat only
+        policies['attacker'].move_sequence = QUICK_ATTACKS[0]

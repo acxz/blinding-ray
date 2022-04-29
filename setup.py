@@ -19,9 +19,11 @@ setuptools.setup(
     packages=setuptools.find_packages(where="src"),
     install_requires=[
         'chess',
+        'gym',
         'open-spiel',
         'psutil',
         'ray[rllib]',
+        'ray[tune]',
         'reconchess',
     ],
 )

@@ -80,7 +80,6 @@ class TroutCallbacks(DefaultCallbacks):
         try:
             # if the engine is already terminated then this call will throw an exception
             trout_policy.engine.quit()
-            print("killing the fish")
         except chess.engine.EngineTerminatedError:
             pass
 
@@ -101,6 +100,5 @@ class TroutCallbacks(DefaultCallbacks):
         try:
             engine_process = psutil.Process(engine_pid)
             engine_process.terminate()
-            print("banishing the fish")
         except:
             print("prob already dead")

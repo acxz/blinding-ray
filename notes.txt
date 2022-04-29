@@ -8,11 +8,14 @@ use same estimation as trout bot but use vanilla RL on it
 use same estimation as trout bot but use IRL on it
 
 Links:
+papers on drl and imperfect information
 https://www.reddit.com/r/reinforcementlearning/comments/hdzmv3/help_with_reinforcement_learning_in_reconchess/
 https://arxiv.org/abs/2006.10410
 https://arxiv.org/abs/1603.01121
 
-papers on drl and imperfect information
+Multi-Task MCEIRL
+http://export.arxiv.org/pdf/1805.08882 (sense/move are two tasks?)
+Generalized MCEIRL (with reward function not being a linear mapping i think)
 
 How to break it up?
 
@@ -20,8 +23,7 @@ Have default estimator in trout: trout_sensor
 Have default planner in trout: stockfish
 
 1. Use RL to replace stockfish but keep estimator
-    Use IRL to replace stockfish (which IRL to pick?) Read the survey paper and
-    figure out the state of the art IRL alg
+    Use MCEIRL to replace stockfish
 
 2. Use RL to replace estimator but keep stockfish planner
     Have a good default planner but try to improve the information stockfish
@@ -60,34 +62,140 @@ output? // Figure out
 
 loss function input: ?
 
-remember we can just IRL on top of both Trout's sensor and planner
+remember we can just MCEIRL on top of both Trout's sensor and planner
 
 // Report Due: 3/24/22
+IEEE conf format
+updated slide
+Title of the project,
+motivation,
+problem formulation,
+prior literature review,
 
-start off with loading in env and creating a simple agent for it
-Then create an IRL Policy/Trainer
+// Second Report Due: 4/12/22
+Add results for MCEIRL
 
 Run rllib env (okay it runs!)
-# TODO make a child env from the open_spiel env to have our own render function
-
+make a child env from the open_spiel env to have our own render function (done!)
 Implement Random, Attacker, and Trout via rllib env (done!)
 
-Implement a vanilla RL alg
-Code & Implement IRL alg
+start off with loading in env and creating a simple agent for it
+Then create an MCEIRL Policy/Trainer
+
+// Do we need to consider parametric action spaces for the rbc env?
+// Along with custom models
+https://docs.ray.io/en/latest/rllib/rllib-models.html#variable-length-parametric-action-spaces
+
+MCEIRL implementation progress:
+- gather methods that need to be implemented from Policy/TorchPolicy
+Policy not implemented:
+    compute_actions
+    compute_log_likelihoods
+    loss
+    load_batch_into_buffer
+    get_num_samples_loaded_into_buffer
+    learn_on_loaded_batch
+    compute_gradients
+    apply_gradients
+    get_weights
+    set_weights
+    export_checkpoint
+    export_model
+    import_model_from_h5
+from these TorchPolicy implements:
+    compute_actions
+    compute_log_likelihoods
+    load_batch_into_buffer
+    get_num_samples_loaded_into_buffer
+    learn_on_loaded_batch
+    compute_gradients
+    apply_gradients
+    get_weights
+    set_weights
+    export_model
+    import_model_from_h5
+and TorchPolicy does not implement:
+    loss (algorithm)
+    export_checkpoint (engineering)
+TorchPolicy additionally requires:
+    nothing else
+
+- understand high level algorithm
+This is godsend: https://apps.dtic.mil/sti/pdfs/AD1090741.pdf
+
+# TODO
+Code & Implement MCEIRL alg
+
+Experiments/Graphs to show:
+(winrate for 100 games at every X many checkpoints) at least 10ish
+
+train with attacker behaviors
+-compare MCEIRL with random
+-compare MCEIRL with attacker
+
+train with trout behaviors
+-compare MCEIRL with random
+-compare MCEIRL with attacker
+-compare MCEIRL with trout
+
+MCEIRL alg:
+Steps: (Pseudocode:)
 
 Tensorboard viewing:
-tensorboard --logdir ~/ray_results/... (Just the dir not the actual json)
+tensorboard --logdir <logdir>
+tensorboard --logdir ~/vcs/git/github/acxz/blinding-ray/logs
+
+Misc. issues:
+Figure out why dataset api is not working
+
+or figure out how to json read multiagent
+Upstream issue: https://github.com/ray-project/ray/issues/24283
+Use BC for now as it does not require postprocess_input to be true
+For BC which agent is the behavior being cloned for in a multiagent setting?
+
+When loading experiences during training for trout get the following error:
+Looks like we kill it, but don't restart it
+workaround: during training comment out TroutCallbacks
+```terminal output
+Training
+Train iter: 1/100
+*** SIGTERM received at time=1651109112 on cpu 2 ***
+PC: @     0x7f8bdc97e79b  (unknown)  kill
+    @     0x7f8bdc97e560  (unknown)  (unknown)
+[2022-04-27 21:25:12,887 E 141269 141269] logging.cc:325: *** SIGTERM received at time=1651109112 on cpu 2 ***
+[2022-04-27 21:25:12,887 E 141269 141269] logging.cc:325: PC: @     0x7f8bdc97e79b  (unknown)  kill
+[2022-04-27 21:25:12,888 E 141269 141269] logging.cc:325:     @     0x7f8bdc97e560  (unknown)  (unknown)
+prob already dead
+Train iter: 2/100
+prob already dead
+Train iter: 3/100
+prob already dead
+Train iter: 4/100
+prob already dead
+[1]    141269 IOT instruction (core dumped)  python scripts/train_mceirl_rbc.py
+```
+
 
 Imp upstream: (other issues and bugs listed in code comments)
 
 To get the info state need the following patch in (upstream)
 /rllib/evaluation/collectors/simple_list_collector.py
 ```python
-            # (acxz) add INFOS
-            delta = -1 if data_col in [
-                SampleBatch.OBS, SampleBatch.ENV_ID, SampleBatch.EPS_ID,
-                SampleBatch.AGENT_INDEX, SampleBatch.T, SampleBatch.INFOS
-            ] else 0
+            # Create the batch of data from the different buffers.
+            data_col = view_req.data_col or view_col
+            delta = (
+                -1
+                if data_col
+                in [
+                    SampleBatch.OBS,
+                    SampleBatch.ENV_ID,
+                    SampleBatch.EPS_ID,
+                    SampleBatch.AGENT_INDEX,
+                    SampleBatch.T,
+                    # (acxz): add INFOS
+                    SampleBatch.INFOS,
+                ]
+                else 0
 ```
 Note: This doesn't solve the fact that we don't get an info for the first obs
 
@@ -99,7 +207,6 @@ file:
             try:
                 # TODO: (acxz) sometimes this is an illegal action yet no error is thrown
                 # This is prob RBC code's fault for not throwing a pyspiel.SpielError i'm guessing
-                # but also why is action a bad value? I guess dependent on the policy being sent
                 # So we do an assertion and then catch it
                 assert action[curr_player] in self.state.legal_actions()
 
@@ -133,5 +240,17 @@ rbc (maybe with state->ActionToString)
 right now work with ascii chess.board representation (does rbc have their own
 ascci repr? need for sensing)
 
-Add a wrapper on the RBC bot API to creating a RL policy in rllib for easier
+TODO: Add a wrapper on the RBC bot API to creating a RL policy in rllib for easier
 implementation of bots in both rllib open_spiel and APL's rbc servers
+
+openspiel spits out error message for incorrect action no matter what (can't
+supress it), for sense action we supress by modifying the sense to stay in
+corner 6x6
+
+Should IRL algorithms be a mixin or a plugin based algorithm (like exploration
+based curiosity)?
+This is because the reward learning is technically a different problem from
+policy learning. Should be plugin and play, imo.
+Typically IRL algs do the reward learning and use a separate alg to learn the
+policy anyway.
+Maybe ask the HumanCompatibleAI/imitation folks about this idea?
